@@ -13,6 +13,7 @@ import time
 import os
 import copy
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 plt.ion()
 
@@ -64,14 +65,14 @@ use_gpu = torch.cuda.is_available()
 # imshow(out, title=[class_names[x] for x in classes])
 
 
-def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
+def train_model(model, criterion, optimizer, scheduler, num_epochs=5):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
     for epoch in range(num_epochs):
-        print('Epoch {}/{}'.format(epoch, num_epochs - 1))
+        print('Epoch {}/{}'.format(epoch + 1, num_epochs))
         print('-' * 10)
 
         for phase in ['train', 'val']:
@@ -84,42 +85,46 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
             running_loss = 0.0
             running_corrects = 0
 
-            for data in dataloaders[phase]:
+            with tqdm(total=len(dataloaders[phase]), desc='Batch Processing', unit='batch') as pbar:
 
-                inputs, labels = data
+                for data in dataloaders[phase]:
 
-                if use_gpu:
-                    # inputs = Variable(inputs.cuda())
-                    # labels = Variable(labels.cuda())
-                    inputs = inputs.cuda()
-                    labels = labels.cuda()
-                else:
-                    # inputs, labels = Variable(inputs), Variable(labels)
-                    # inputs, labels = Variable(inputs), Variable(labels)
-                    pass
-                optimizer.zero_grad()
-                outputs = model(inputs)
-                _, preds = torch.max(outputs.data, 1)
-                loss = criterion(outputs, labels)
+                    inputs, labels = data
 
-                if phase == 'train':
-                    loss.backward()
-                    optimizer.step()
-                a = loss.item()
-                b = inputs.size()[0]
-                # running_loss = a * b
-                # running_loss += loss.data[0] * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                    if use_gpu:
+                        # inputs = Variable(inputs.cuda())
+                        # labels = Variable(labels.cuda())
+                        inputs = inputs.cuda()
+                        labels = labels.cuda()
+                    else:
+                        # inputs, labels = Variable(inputs), Variable(labels)
+                        # inputs, labels = Variable(inputs), Variable(labels)
+                        pass
+                    optimizer.zero_grad()
+                    outputs = model(inputs)
+                    _, preds = torch.max(outputs.data, 1)
+                    loss = criterion(outputs, labels)
 
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = running_corrects / dataset_sizes[phase]
+                    if phase == 'train':
+                        loss.backward()
+                        optimizer.step()
+                    # a = loss.item()
+                    # b = inputs.size()[0]
+                    # # running_loss = a * b
+                    running_loss += loss.item() * inputs.size(0)
+                    running_corrects += torch.sum(preds == labels.data)
+                    pbar.update()
 
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                phase, epoch_loss, epoch_acc))
+                epoch_loss = running_loss / dataset_sizes[phase]
+                epoch_acc = running_corrects / dataset_sizes[phase]
 
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                best_model_wts = copy.deepcopy(model.state_dict())
+                print('{} Loss: {:.4f} Acc: {:.4f}'.format(
+                    phase, epoch_loss, epoch_acc))
+
+                if phase == 'val' and epoch_acc > best_acc:
+                    best_acc = epoch_acc
+                    best_model_wts = copy.deepcopy(model.state_dict())
+
 
         print()
 
@@ -141,9 +146,10 @@ def visualize_model(model, num_images=6):
     for i, data in enumerate(dataloaders['val']):
         inputs, labels = data
         if use_gpu:
-            inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
+            inputs, labels = inputs.cuda(), labels.cuda()
         else:
-            inputs, labels = Variable(inputs), Variable(labels)
+            # inputs, labels = Variable(inputs), Variable(labels)
+            pass
 
         with torch.no_grad():
 
@@ -178,7 +184,9 @@ optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
 
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
+epochs = 5
+
 model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,
-                       num_epochs=25)
+                       num_epochs=epochs)
 
 visualize_model(model_ft)
